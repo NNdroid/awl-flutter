@@ -76,10 +76,75 @@ void main() {
       expect(qrPeer!.peerID, peers.first.peerID);
     });
 
+    // Exit/gateway badges pick their layout from the header's actual width:
+    // full labels inline with the name, short labels inline, or full labels
+    // on their own row below the subtitle when even short ones don't fit.
+
+    testWidgets('badges show full labels next to the name on a wide panel', (tester) async {
+      final peers = _loadPeers();
+      await pumpAppWidget(
+        tester,
+        PeersListView(
+          peers: peers,
+          proxyExitPeerID: peers.first.peerID,
+          gatewayExitPeerID: peers.first.peerID,
+        ),
+        size: desktopSize,
+      );
+
+      expect(find.text('SOCKS5 exit'), findsOneWidget);
+      expect(find.text('VPN gateway'), findsOneWidget);
+      // Inline: badges sit on the same row as the peer name.
+      final nameCenter = tester.getCenter(find.text(peers.first.displayName));
+      final badgeCenter = tester.getCenter(find.text('SOCKS5 exit'));
+      expect((badgeCenter.dy - nameCenter.dy).abs(), lessThan(2));
+    });
+
+    testWidgets('badges shorten to SOCKS5/VPN when full labels do not fit', (tester) async {
+      final peers = _loadPeers();
+      await pumpAppWidget(
+        tester,
+        PeersListView(
+          peers: peers,
+          proxyExitPeerID: peers.first.peerID,
+          gatewayExitPeerID: peers.first.peerID,
+        ),
+        size: const Size(650, 900),
+      );
+
+      expect(find.text('SOCKS5'), findsOneWidget);
+      expect(find.text('VPN'), findsOneWidget);
+      expect(find.text('SOCKS5 exit'), findsNothing);
+      expect(find.text('VPN gateway'), findsNothing);
+      // Name is not squeezed out.
+      expect(find.text(peers.first.displayName), findsOneWidget);
+    });
+
+    testWidgets('badges move to their own row when even short labels do not fit', (tester) async {
+      final peers = _loadPeers();
+      await pumpAppWidget(
+        tester,
+        PeersListView(
+          peers: peers,
+          proxyExitPeerID: peers.first.peerID,
+          gatewayExitPeerID: peers.first.peerID,
+        ),
+        size: const Size(420, 900),
+      );
+
+      // Own row uses full labels again, rendered below the name.
+      expect(find.text('SOCKS5 exit'), findsOneWidget);
+      expect(find.text('VPN gateway'), findsOneWidget);
+      final nameCenter = tester.getCenter(find.text(peers.first.displayName));
+      final badgeCenter = tester.getCenter(find.text('SOCKS5 exit'));
+      expect(badgeCenter.dy, greaterThan(nameCenter.dy + 10));
+    });
+
     // The expanded details switch between a 2-column grid and single-column
     // rows based on the panel's actual width (LayoutBuilder), not the screen.
-    // The grid is the only place that uses a [Wrap], so its presence/absence
-    // distinguishes the two layouts.
+    // Among these tests the grid is the only place that uses a [Wrap] (the
+    // badges' own-row layout also uses one, but no badges are passed here),
+    // so its presence/absence distinguishes the two layouts.
 
     testWidgets('expanded peer details use a 2-column grid on a wide panel', (tester) async {
       final peers = _loadPeers();
