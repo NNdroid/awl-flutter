@@ -161,6 +161,7 @@ class _PeersListViewState extends State<PeersListView> {
         widget.gatewayExitPeerID != null &&
         widget.gatewayExitPeerID!.isNotEmpty &&
         widget.gatewayExitPeerID == peer.peerID;
+    final badges = <_PeerBadgeSpec>[if (isProxyExit) _kProxyExitBadge, if (isGatewayExit) _kVpnGatewayBadge];
 
     return Card(
       margin: EdgeInsets.only(bottom: 12),
@@ -185,35 +186,59 @@ class _PeersListViewState extends State<PeersListView> {
                 child: Row(
                   children: [
                     Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
+                      child: LayoutBuilder(
+                        builder: (context, constraints) {
+                          final badgeLayout = _resolveBadgeLayout(
+                            context,
+                            constraints.maxWidth,
+                            peer.displayName,
+                            badges,
+                          );
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Flexible(
-                                child: Text(
-                                  peer.displayName,
-                                  style: Theme.of(context).textTheme.titleMedium,
-                                  overflow: TextOverflow.ellipsis,
+                              Row(
+                                children: [
+                                  Flexible(
+                                    child: Text(
+                                      peer.displayName,
+                                      style: Theme.of(context).textTheme.titleMedium,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  if (badgeLayout != _BadgeLayout.ownRow)
+                                    for (final (i, badge) in badges.indexed) ...[
+                                      SizedBox(width: i == 0 ? _kBadgeLeadingGap : _kBadgeInterGap),
+                                      _PeerBadge(badge, short: badgeLayout == _BadgeLayout.inlineShort),
+                                    ],
+                                ],
+                              ),
+                              SizedBox(height: 2),
+                              Text(
+                                subtitle,
+                                style: TextStyle(fontSize: 13, color: colorScheme.onSurfaceVariant),
+                              ),
+                              if (lastSeenText != null) ...[
+                                SizedBox(height: 1),
+                                Text(
+                                  lastSeenText,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
+                                  ),
                                 ),
-                              ),
-                              if (isProxyExit) ...[SizedBox(width: 12), _ExitBadge()],
-                              if (isGatewayExit) ...[SizedBox(width: 8), _GatewayBadge()],
+                              ],
+                              if (badgeLayout == _BadgeLayout.ownRow) ...[
+                                SizedBox(height: 6),
+                                Wrap(
+                                  spacing: _kBadgeInterGap,
+                                  runSpacing: 4,
+                                  children: [for (final badge in badges) _PeerBadge(badge)],
+                                ),
+                              ],
                             ],
-                          ),
-                          SizedBox(height: 2),
-                          Text(subtitle, style: TextStyle(fontSize: 13, color: colorScheme.onSurfaceVariant)),
-                          if (lastSeenText != null) ...[
-                            SizedBox(height: 1),
-                            Text(
-                              lastSeenText,
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
-                              ),
-                            ),
-                          ],
-                        ],
+                          );
+                        },
                       ),
                     ),
                     SizedBox(width: 8),
@@ -474,46 +499,112 @@ Widget buildPeersOnlineIndicator(BuildContext context, int online, int total) {
   );
 }
 
-class _ExitBadge extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return Tooltip(
-      message: 'SOCKS5 proxy traffic exits through this device',
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(8, 3, 10, 3),
-        decoration: BoxDecoration(
-          color: colorScheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(999),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Icon(Icons.exit_to_app_rounded, size: 14, color: colorScheme.onSurfaceVariant),
-            const SizedBox(width: 6),
-            Text(
-              'SOCKS5 exit',
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
-                color: colorScheme.onSurfaceVariant,
-                height: 1.0,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+class _PeerBadgeSpec {
+  final IconData icon;
+  final String fullLabel;
+  final String shortLabel;
+  final String tooltip;
+
+  const _PeerBadgeSpec({
+    required this.icon,
+    required this.fullLabel,
+    required this.shortLabel,
+    required this.tooltip,
+  });
 }
 
-class _GatewayBadge extends StatelessWidget {
+const _kProxyExitBadge = _PeerBadgeSpec(
+  icon: Icons.exit_to_app_rounded,
+  fullLabel: 'SOCKS5 exit',
+  shortLabel: 'SOCKS5',
+  tooltip: 'SOCKS5 proxy traffic exits through this device',
+);
+
+const _kVpnGatewayBadge = _PeerBadgeSpec(
+  icon: Icons.vpn_lock_outlined,
+  fullLabel: 'VPN gateway',
+  shortLabel: 'VPN',
+  tooltip: 'All internet traffic exits through this device (VPN gateway)',
+);
+
+/// How the exit/gateway badges are placed relative to the peer name.
+/// Resolved by [_resolveBadgeLayout] from the header's *actual* width
+/// (same LayoutBuilder convention as [_kPeerDetailsTwoColumnMinWidth]).
+enum _BadgeLayout { inlineFull, inlineShort, ownRow }
+
+/// The peer name never ellipsizes below this many characters; badges shrink
+/// to short labels and then move to their own row instead.
+const int _kMinVisibleNameChars = 12;
+
+/// Fixed (non-text) width of a [_PeerBadge]: left padding + icon + icon-text
+/// gap + right padding. Must match [_PeerBadge.build].
+const double _kBadgeChromeWidth = 8 + 14 + 6 + 10;
+
+const double _kBadgeLeadingGap = 12; // between peer name and first badge
+const double _kBadgeInterGap = 8; // between adjacent badges
+
+/// Color is applied in [_PeerBadge.build]; kept color-less here so
+/// [_resolveBadgeLayout] can measure with the exact same style.
+const TextStyle _kBadgeLabelStyle = TextStyle(fontSize: 11, fontWeight: FontWeight.w500, height: 1.0);
+
+_BadgeLayout _resolveBadgeLayout(
+  BuildContext context,
+  double maxWidth,
+  String peerName,
+  List<_PeerBadgeSpec> badges,
+) {
+  if (badges.isEmpty) return _BadgeLayout.inlineFull;
+
+  final textScaler = MediaQuery.textScalerOf(context);
+
+  // Merge with DefaultTextStyle the same way the rendered Text does —
+  // otherwise inherited properties (e.g. bodyMedium's letterSpacing)
+  // make the real text wider than measured.
+  final baseStyle = DefaultTextStyle.of(context).style;
+
+  double textWidth(String text, TextStyle? style) {
+    final painter = TextPainter(
+      text: TextSpan(text: text, style: baseStyle.merge(style)),
+      textDirection: TextDirection.ltr,
+      textScaler: textScaler,
+      maxLines: 1,
+    )..layout();
+    final width = painter.width;
+    painter.dispose();
+    return width;
+  }
+
+  // The ellipsis renders *inside* the name's width, so reserve room for it
+  // too — otherwise the visible-characters guarantee comes up short.
+  final minName = peerName.length <= _kMinVisibleNameChars
+      ? peerName
+      : '${peerName.substring(0, _kMinVisibleNameChars)}…';
+  final minNameWidth = textWidth(minName, Theme.of(context).textTheme.titleMedium);
+
+  double badgesWidth(bool short) {
+    var width = _kBadgeLeadingGap + _kBadgeInterGap * (badges.length - 1);
+    for (final badge in badges) {
+      width += _kBadgeChromeWidth + textWidth(short ? badge.shortLabel : badge.fullLabel, _kBadgeLabelStyle);
+    }
+    return width;
+  }
+
+  if (minNameWidth + badgesWidth(false) <= maxWidth) return _BadgeLayout.inlineFull;
+  if (minNameWidth + badgesWidth(true) <= maxWidth) return _BadgeLayout.inlineShort;
+  return _BadgeLayout.ownRow;
+}
+
+class _PeerBadge extends StatelessWidget {
+  final _PeerBadgeSpec spec;
+  final bool short;
+
+  const _PeerBadge(this.spec, {this.short = false});
+
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     return Tooltip(
-      message: 'All internet traffic exits through this device (VPN gateway)',
+      message: spec.tooltip,
       child: Container(
         padding: const EdgeInsets.fromLTRB(8, 3, 10, 3),
         decoration: BoxDecoration(
@@ -524,16 +615,11 @@ class _GatewayBadge extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Icon(Icons.vpn_lock_outlined, size: 14, color: colorScheme.onSurfaceVariant),
+            Icon(spec.icon, size: 14, color: colorScheme.onSurfaceVariant),
             const SizedBox(width: 6),
             Text(
-              'VPN gateway',
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
-                color: colorScheme.onSurfaceVariant,
-                height: 1.0,
-              ),
+              short ? spec.shortLabel : spec.fullLabel,
+              style: _kBadgeLabelStyle.copyWith(color: colorScheme.onSurfaceVariant),
             ),
           ],
         ),
