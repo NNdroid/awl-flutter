@@ -1,0 +1,9 @@
+VPN gateway now works on Windows — both as a client and as an exit node. Your Android device can now route all its traffic through a Windows PC.
+
+Linux exit nodes now survive network changes (Wi-Fi/Ethernet) without restarting awl. The gateway can also be enabled while offline and connects once a network appears.
+
+Security: malformed tunnel packets can no longer crash or overload a peer.
+
+Fixed DNS AAAA (IPv6) queries incorrectly returning IPv4 records.
+
+UI: peer badges adapt to narrow screens.
