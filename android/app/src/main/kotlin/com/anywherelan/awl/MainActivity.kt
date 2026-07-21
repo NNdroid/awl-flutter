@@ -137,9 +137,18 @@ class MainActivity : FlutterActivity() {
         val networkAddress = ipNetParts[0]
         val networkAddressMask = ipNetParts[1].toInt()
 
+        val ipNetV6Parts = config.vpn.ipNetV6.split("/")
+        if (ipNetV6Parts.size != 2) {
+            throw Exception("Invalid ipNetV6 format: ${config.vpn.ipNetV6}")
+        }
+        val networkAddressV6 = ipNetV6Parts[0]
+        val networkAddressV6Mask = ipNetV6Parts[1].toInt()
+
+
         val builder: VpnService.Builder = service.builder
         builder.setSession(config.vpn.interfaceName)
         builder.addAddress(networkAddress, networkAddressMask)
+        builder.addAddress(networkAddressV6, networkAddressV6Mask)
         builder.setMtu(3500)
 
         if (config.vpnGateway.clientEnabled) {

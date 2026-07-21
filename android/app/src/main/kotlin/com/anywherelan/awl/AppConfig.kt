@@ -15,7 +15,8 @@ data class AppConfig(
             val vpnConfig = VpnConfig(
                 disableVPNInterface = vpnJson.getBoolean("disableVPNInterface"),
                 interfaceName = vpnJson.getString("interfaceName"),
-                ipNet = vpnJson.getString("ipNet")
+                ipNet = vpnJson.getString("ipNet"),
+                ipNetV6 = vpnJson.getString("ipNetV6")
             )
 
             val dnsJson = root.optJSONObject("dns")
@@ -44,7 +45,8 @@ data class AppConfig(
 data class VpnConfig(
     val disableVPNInterface: Boolean,
     val interfaceName: String,
-    val ipNet: String
+    val ipNet: String,
+    val ipNetV6: String
 )
 
 // GatewayConfig mirrors GatewayConfig in github.com/anywherelan/awl/config.
